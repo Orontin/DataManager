@@ -1,388 +1,537 @@
 #include "database.h"
+#include <QSqlError>
+#include <QSqlRecord>
 
 QSqlDatabase DataBase::db;
 
 const QString DataBase::nameTableDatas("datas");
 const QString DataBase::nameTableDatasColumnId("id");
 const QString DataBase::nameTableDatasColumnName("name");
+const QString DataBase::nameTableDatasColumnSalt("salt");
+const QString DataBase::nameTableDatasColumnIV("iv");
 
 const QString DataBase::nameTableLogins("logins");
 const QString DataBase::nameTableLoginsColumnId("id");
 const QString DataBase::nameTableLoginsColumnIdDatas("id_datas");
 const QString DataBase::nameTableLoginsColumnLogin("login");
+const QString DataBase::nameTableLoginsColumnSalt("salt");
+const QString DataBase::nameTableLoginsColumnIV("iv");
 
 const QString DataBase::nameTablePasswords("passwords");
 const QString DataBase::nameTablePasswordsColumnId("id");
 const QString DataBase::nameTablePasswordsColumnIdDatas("id_datas");
 const QString DataBase::nameTablePasswordsColumnPassword("password");
+const QString DataBase::nameTablePasswordsColumnSalt("salt");
+const QString DataBase::nameTablePasswordsColumnIV("iv");
 
 const QString DataBase::nameTableMails("mails");
 const QString DataBase::nameTableMailsColumnId("id");
 const QString DataBase::nameTableMailsColumnIdDatas("id_datas");
 const QString DataBase::nameTableMailsColumnMail("mail");
+const QString DataBase::nameTableMailsColumnSalt("salt");
+const QString DataBase::nameTableMailsColumnIV("iv");
 
 const QString DataBase::nameTableTelephones("telephones");
 const QString DataBase::nameTableTelephonesColumnId("id");
 const QString DataBase::nameTableTelephonesColumnIdDatas("id_datas");
 const QString DataBase::nameTableTelephonesColumnTelephone("telephone");
+const QString DataBase::nameTableTelephonesColumnSalt("salt");
+const QString DataBase::nameTableTelephonesColumnIV("iv");
 
 const QString DataBase::nameTableTwofactors("twofactors");
 const QString DataBase::nameTableTwofactorsColumnId("id");
 const QString DataBase::nameTableTwofactorsColumnIdDatas("id_datas");
 const QString DataBase::nameTableTwofactorsColumnTwofactor("twofactor");
+const QString DataBase::nameTableTwofactorsColumnSalt("salt");
+const QString DataBase::nameTableTwofactorsColumnIV("iv");
 
 const QString DataBase::nameTableSecrets("secrets");
 const QString DataBase::nameTableSecretsColumnId("id");
 const QString DataBase::nameTableSecretsColumnIdDatas("id_datas");
 const QString DataBase::nameTableSecretsColumnSecret("secret");
+const QString DataBase::nameTableSecretsColumnSalt("salt");
+const QString DataBase::nameTableSecretsColumnIV("iv");
 
-void DataBase::write(QList<Data> &datas)
+void DataBase::write(Datas &datas)
 {
     DataBase::common();
 
-    for (Data &data : datas) {
-        QString request;
-        if (data.id == 0) {
-            request = QString("INSERT INTO '%1' ('%2') VALUES ('%3') RETURNING %4").arg(DataBase::nameTableDatas).arg(DataBase::nameTableDatasColumnName).arg(data.name).arg(DataBase::nameTableDatasColumnId);
-
-            QSqlQuery query(DataBase::db);
-            query.exec(request);
-
-            query.next();
-            data.id = query.value(0).toUInt();
-
-            for (Login &login : data.logins) {
-                login.id_datas = data.id;
-            }
-            for (Password &password : data.passwords) {
-                password.id_datas = data.id;
-            }
-            for (Mail &mail : data.mails) {
-                mail.id_datas = data.id;
-            }
-            for (Telephone &telephone : data.telephones) {
-                telephone.id_datas = data.id;
-            }
-            for (Twofactor &twofactor : data.twofactors) {
-                twofactor.id_datas = data.id;
-            }
-            for (Secret &secret : data.secrets) {
-                secret.id_datas = data.id;
-            }
-        } else {
-            request = QString("UPDATE '%1' SET %2 = '%3' WHERE %4 = '%5'").arg(DataBase::nameTableDatas).arg(DataBase::nameTableDatasColumnName).arg(data.name).arg(DataBase::nameTableDatasColumnId).arg(data.id);
-
-            QSqlQuery query(DataBase::db);
-            query.exec(request);
-        }
-
-        DataBase::write(data.logins);
-        DataBase::write(data.passwords);
-        DataBase::write(data.mails);
-        DataBase::write(data.telephones);
-        DataBase::write(data.twofactors);
-        DataBase::write(data.secrets);
-    }
-}
-
-void DataBase::write(const QList<Login> &logins)
-{
-    DataBase::common();
-
-    for (const Login &login : logins) {
-        QString request;
-        if (login.id == 0) {
-            request = QString("INSERT INTO '%1' ('%2', '%3') VALUES ('%4', '%5')").arg(DataBase::nameTableLogins).arg(DataBase::nameTableLoginsColumnIdDatas).arg(DataBase::nameTableLoginsColumnLogin).arg(login.id_datas).arg(login.login);
-        } else {
-            request = QString("UPDATE '%1' SET %2 = '%3', %4 = '%5' WHERE %6 = '%7'").arg(DataBase::nameTableLogins).arg(DataBase::nameTableLoginsColumnIdDatas).arg(login.id_datas).arg(DataBase::nameTableLoginsColumnLogin).arg(login.login).arg(DataBase::nameTableLoginsColumnId).arg(login.id);
-        }
-
+    for (Data *data : datas.datas) {
         QSqlQuery query(DataBase::db);
-        query.exec(request);
-    }
-}
-
-void DataBase::write(const QList<Password> &passwords)
-{
-    DataBase::common();
-
-    for (const Password &password : passwords) {
-        QString request;
-        if (password.id == 0) {
-            request = QString("INSERT INTO '%1' ('%2', '%3') VALUES ('%4', '%5')").arg(DataBase::nameTablePasswords).arg(DataBase::nameTablePasswordsColumnIdDatas).arg(DataBase::nameTablePasswordsColumnPassword).arg(password.id_datas).arg(password.password);
+        if (data->id == 0) {
+            query.prepare(QString("INSERT INTO \"%1\" (\"%2\", \"%3\", \"%4\") VALUES (:name, :salt, :iv)")
+                              .arg(DataBase::nameTableDatas)
+                              .arg(DataBase::nameTableDatasColumnName)
+                              .arg(DataBase::nameTableDatasColumnSalt)
+                              .arg(DataBase::nameTableDatasColumnIV));
+            query.bindValue(":name", data->name);
+            query.bindValue(":salt", data->salt);
+            query.bindValue(":iv", data->iv);
+            if (!query.exec()) {
+                continue;
+            }
+            data->id = query.lastInsertId().toUInt();
         } else {
-            request = QString("UPDATE '%1' SET %2 = '%3', %4 = '%5' WHERE %6 = '%7'").arg(DataBase::nameTablePasswords).arg(DataBase::nameTablePasswordsColumnIdDatas).arg(password.id_datas).arg(DataBase::nameTablePasswordsColumnPassword).arg(password.password).arg(DataBase::nameTablePasswordsColumnId).arg(password.id);
+            query.prepare(QString("UPDATE \"%1\" SET \"%2\" = :name, \"%3\" = :salt, \"%4\" = :iv WHERE \"%5\" = :id")
+                              .arg(DataBase::nameTableDatas)
+                              .arg(DataBase::nameTableDatasColumnName)
+                              .arg(DataBase::nameTableDatasColumnSalt)
+                              .arg(DataBase::nameTableDatasColumnIV)
+                              .arg(DataBase::nameTableDatasColumnId));
+            query.bindValue(":name", data->name);
+            query.bindValue(":salt", data->salt);
+            query.bindValue(":iv", data->iv);
+            query.bindValue(":id", data->id);
+            if (!query.exec()) {
+                continue;
+            }
         }
 
-        QSqlQuery query(DataBase::db);
-        query.exec(request);
+        write(data->logins->logins);
+        write(data->passwords->passwords);
+        write(data->mails->mails);
+        write(data->telephones->telephones);
+        write(data->twofactors->twofactors);
+        write(data->secrets->secrets);
     }
 }
 
-void DataBase::write(const QList<Mail> &mails)
+void DataBase::write(QList<Login*> &logins)
 {
     DataBase::common();
 
-    for (const Mail &mail : mails) {
-        QString request;
-        if (mail.id == 0) {
-            request = QString("INSERT INTO '%1' ('%2', '%3') VALUES ('%4', '%5')").arg(DataBase::nameTableMails).arg(DataBase::nameTableMailsColumnIdDatas).arg(DataBase::nameTableMailsColumnMail).arg(mail.id_datas).arg(mail.mail);
+    for (Login *login : logins) {
+        QSqlQuery query(DataBase::db);
+        if (login->id == 0) {
+            query.prepare(QString("INSERT INTO \"%1\" (\"%2\", \"%3\", \"%4\", \"%5\") VALUES (:id_datas, :login, :salt, :iv)")
+                              .arg(DataBase::nameTableLogins)
+                              .arg(DataBase::nameTableLoginsColumnIdDatas)
+                              .arg(DataBase::nameTableLoginsColumnLogin)
+                              .arg(DataBase::nameTableLoginsColumnSalt)
+                              .arg(DataBase::nameTableLoginsColumnIV));
+            query.bindValue(":id_datas", login->logins->data->id);
+            query.bindValue(":login", login->login);
+            query.bindValue(":salt", login->salt);
+            query.bindValue(":iv", login->iv);
+            if (!query.exec()) {
+                continue;
+            }
+            login->id = query.lastInsertId().toUInt();
         } else {
-            request = QString("UPDATE '%1' SET %2 = '%3', %4 = '%5' WHERE %6 = '%7'").arg(DataBase::nameTableMails).arg(DataBase::nameTableMailsColumnIdDatas).arg(mail.id_datas).arg(DataBase::nameTableMailsColumnMail).arg(mail.mail).arg(DataBase::nameTableMailsColumnId).arg(mail.id);
+            query.prepare(QString("UPDATE \"%1\" SET \"%2\" = :id_datas, \"%3\" = :login, \"%4\" = :salt, \"%5\" = :iv WHERE \"%6\" = :id")
+                              .arg(DataBase::nameTableLogins)
+                              .arg(DataBase::nameTableLoginsColumnIdDatas)
+                              .arg(DataBase::nameTableLoginsColumnLogin)
+                              .arg(DataBase::nameTableLoginsColumnSalt)
+                              .arg(DataBase::nameTableLoginsColumnIV)
+                              .arg(DataBase::nameTableLoginsColumnId));
+            query.bindValue(":id_datas", login->logins->data->id);
+            query.bindValue(":login", login->login);
+            query.bindValue(":salt", login->salt);
+            query.bindValue(":iv", login->iv);
+            query.bindValue(":id", login->id);
+            if (!query.exec()) {
+                qWarning() << "Update login failed:" << query.lastError().text();
+            }
         }
-
-        QSqlQuery query(DataBase::db);
-        query.exec(request);
     }
 }
 
-void DataBase::write(const QList<Telephone> &telephones)
+void DataBase::write(QList<Password*> &passwords)
 {
     DataBase::common();
 
-    for (const Telephone &telephone : telephones) {
-        QString request;
-        if (telephone.id == 0) {
-            request = QString("INSERT INTO '%1' ('%2', '%3') VALUES ('%4', '%5')").arg(DataBase::nameTableTelephones).arg(DataBase::nameTableTelephonesColumnIdDatas).arg(DataBase::nameTableTelephonesColumnTelephone).arg(telephone.id_datas).arg(telephone.telephone);
+    for (Password *password : passwords) {
+        QSqlQuery query(DataBase::db);
+        if (password->id == 0) {
+            query.prepare(QString("INSERT INTO \"%1\" (\"%2\", \"%3\", \"%4\", \"%5\") VALUES (:id_datas, :password, :salt, :iv)")
+                              .arg(DataBase::nameTablePasswords)
+                              .arg(DataBase::nameTablePasswordsColumnIdDatas)
+                              .arg(DataBase::nameTablePasswordsColumnPassword)
+                              .arg(DataBase::nameTablePasswordsColumnSalt)
+                              .arg(DataBase::nameTablePasswordsColumnIV));
+            query.bindValue(":id_datas", password->passwords->data->id);
+            query.bindValue(":password", password->password);
+            query.bindValue(":salt", password->salt);
+            query.bindValue(":iv", password->iv);
+            if (!query.exec()) {
+                continue;
+            }
+            password->id = query.lastInsertId().toUInt();
         } else {
-            request = QString("UPDATE '%1' SET %2 = '%3', %4 = '%5' WHERE %6 = '%7'").arg(DataBase::nameTableTelephones).arg(DataBase::nameTableTelephonesColumnIdDatas).arg(telephone.id_datas).arg(DataBase::nameTableTelephonesColumnTelephone).arg(telephone.telephone).arg(DataBase::nameTableTelephonesColumnId).arg(telephone.id);
+            query.prepare(QString("UPDATE \"%1\" SET \"%2\" = :id_datas, \"%3\" = :password, \"%4\" = :salt, \"%5\" = :iv WHERE \"%6\" = :id")
+                              .arg(DataBase::nameTablePasswords)
+                              .arg(DataBase::nameTablePasswordsColumnIdDatas)
+                              .arg(DataBase::nameTablePasswordsColumnPassword)
+                              .arg(DataBase::nameTablePasswordsColumnSalt)
+                              .arg(DataBase::nameTablePasswordsColumnIV)
+                              .arg(DataBase::nameTablePasswordsColumnId));
+            query.bindValue(":id_datas", password->passwords->data->id);
+            query.bindValue(":password", password->password);
+            query.bindValue(":salt", password->salt);
+            query.bindValue(":iv", password->iv);
+            query.bindValue(":id", password->id);
+            query.exec();
         }
-
-        QSqlQuery query(DataBase::db);
-        query.exec(request);
     }
 }
 
-void DataBase::write(const QList<Twofactor> &twofactors)
+void DataBase::write(QList<Mail*> &mails)
 {
     DataBase::common();
 
-    for (const Twofactor &twofactor : twofactors) {
-        QString request;
-        if (twofactor.id == 0) {
-            request = QString("INSERT INTO '%1' ('%2', '%3') VALUES ('%4', '%5')").arg(DataBase::nameTableTwofactors).arg(DataBase::nameTableTwofactorsColumnIdDatas).arg(DataBase::nameTableTwofactorsColumnTwofactor).arg(twofactor.id_datas).arg(twofactor.twofactor);
+    for (Mail *mail : mails) {
+        QSqlQuery query(DataBase::db);
+        if (mail->id == 0) {
+            query.prepare(QString("INSERT INTO \"%1\" (\"%2\", \"%3\", \"%4\", \"%5\") VALUES (:id_datas, :mail, :salt, :iv)")
+                              .arg(DataBase::nameTableMails)
+                              .arg(DataBase::nameTableMailsColumnIdDatas)
+                              .arg(DataBase::nameTableMailsColumnMail)
+                              .arg(DataBase::nameTableMailsColumnSalt)
+                              .arg(DataBase::nameTableMailsColumnIV));
+            query.bindValue(":id_datas", mail->mails->data->id);
+            query.bindValue(":mail", mail->mail);
+            query.bindValue(":salt", mail->salt);
+            query.bindValue(":iv", mail->iv);
+            if (!query.exec()) {
+                continue;
+            }
+            mail->id = query.lastInsertId().toUInt();
         } else {
-            request = QString("UPDATE '%1' SET %2 = '%3', %4 = '%5' WHERE %6 = '%7'").arg(DataBase::nameTableTwofactors).arg(DataBase::nameTableTwofactorsColumnIdDatas).arg(twofactor.id_datas).arg(DataBase::nameTableTwofactorsColumnTwofactor).arg(twofactor.twofactor).arg(DataBase::nameTableTwofactorsColumnId).arg(twofactor.id);
+            query.prepare(QString("UPDATE \"%1\" SET \"%2\" = :id_datas, \"%3\" = :mail, \"%4\" = :salt, \"%5\" = :iv WHERE \"%6\" = :id")
+                              .arg(DataBase::nameTableMails)
+                              .arg(DataBase::nameTableMailsColumnIdDatas)
+                              .arg(DataBase::nameTableMailsColumnMail)
+                              .arg(DataBase::nameTableMailsColumnSalt)
+                              .arg(DataBase::nameTableMailsColumnIV)
+                              .arg(DataBase::nameTableMailsColumnId));
+            query.bindValue(":id_datas", mail->mails->data->id);
+            query.bindValue(":mail", mail->mail);
+            query.bindValue(":salt", mail->salt);
+            query.bindValue(":iv", mail->iv);
+            query.bindValue(":id", mail->id);
+            query.exec();
         }
-
-        QSqlQuery query(DataBase::db);
-        query.exec(request);
     }
 }
 
-void DataBase::write(const QList<Secret> &secrets)
+void DataBase::write(QList<Telephone*> &telephones)
 {
     DataBase::common();
 
-    for (const Secret &secret : secrets) {
-        QString request;
-        if (secret.id == 0) {
-            request = QString("INSERT INTO '%1' ('%2', '%3') VALUES ('%4', '%5')").arg(DataBase::nameTableSecrets).arg(DataBase::nameTableSecretsColumnIdDatas).arg(DataBase::nameTableSecretsColumnSecret).arg(secret.id_datas).arg(secret.secret);
+    for (Telephone *telephone : telephones) {
+        QSqlQuery query(DataBase::db);
+        if (telephone->id == 0) {
+            query.prepare(QString("INSERT INTO \"%1\" (\"%2\", \"%3\", \"%4\", \"%5\") VALUES (:id_datas, :telephone, :salt, :iv)")
+                              .arg(DataBase::nameTableTelephones)
+                              .arg(DataBase::nameTableTelephonesColumnIdDatas)
+                              .arg(DataBase::nameTableTelephonesColumnTelephone)
+                              .arg(DataBase::nameTableTelephonesColumnSalt)
+                              .arg(DataBase::nameTableTelephonesColumnIV));
+            query.bindValue(":id_datas", telephone->telephones->data->id);
+            query.bindValue(":telephone", telephone->telephone);
+            query.bindValue(":salt", telephone->salt);
+            query.bindValue(":iv", telephone->iv);
+            if (!query.exec()) {
+                continue;
+            }
+            telephone->id = query.lastInsertId().toUInt();
         } else {
-            request = QString("UPDATE '%1' SET %2 = '%3', %4 = '%5' WHERE %6 = '%7'").arg(DataBase::nameTableSecrets).arg(DataBase::nameTableSecretsColumnIdDatas).arg(secret.id_datas).arg(DataBase::nameTableSecretsColumnSecret).arg(secret.secret).arg(DataBase::nameTableSecretsColumnId).arg(secret.id);
+            query.prepare(QString("UPDATE \"%1\" SET \"%2\" = :id_datas, \"%3\" = :telephone, \"%4\" = :salt, \"%5\" = :iv WHERE \"%6\" = :id")
+                              .arg(DataBase::nameTableTelephones)
+                              .arg(DataBase::nameTableTelephonesColumnIdDatas)
+                              .arg(DataBase::nameTableTelephonesColumnTelephone)
+                              .arg(DataBase::nameTableTelephonesColumnSalt)
+                              .arg(DataBase::nameTableTelephonesColumnIV)
+                              .arg(DataBase::nameTableTelephonesColumnId));
+            query.bindValue(":id_datas", telephone->telephones->data->id);
+            query.bindValue(":telephone", telephone->telephone);
+            query.bindValue(":salt", telephone->salt);
+            query.bindValue(":iv", telephone->iv);
+            query.bindValue(":id", telephone->id);
+            query.exec();
         }
-
-        QSqlQuery query(DataBase::db);
-        query.exec(request);
     }
 }
 
-QList<Data> DataBase::read()
+void DataBase::write(QList<Twofactor*> &twofactors)
 {
-    QList<Data> datas;
-
     DataBase::common();
 
-    DataBase::getDatas(datas);
-    DataBase::getLogins(datas);
-    DataBase::getPasswords(datas);
-    DataBase::getMails(datas);
-    DataBase::getTelephones(datas);
-    DataBase::getTwofactors(datas);
-    DataBase::getSecrets(datas);
+    for (Twofactor *twofactor : twofactors) {
+        QSqlQuery query(DataBase::db);
+        if (twofactor->id == 0) {
+            query.prepare(QString("INSERT INTO \"%1\" (\"%2\", \"%3\", \"%4\", \"%5\") VALUES (:id_datas, :twofactor, :salt, :iv)")
+                              .arg(DataBase::nameTableTwofactors)
+                              .arg(DataBase::nameTableTwofactorsColumnIdDatas)
+                              .arg(DataBase::nameTableTwofactorsColumnTwofactor)
+                              .arg(DataBase::nameTableTwofactorsColumnSalt)
+                              .arg(DataBase::nameTableTwofactorsColumnIV));
+            query.bindValue(":id_datas", twofactor->twofactors->data->id);
+            query.bindValue(":twofactor", twofactor->twofactor);
+            query.bindValue(":salt", twofactor->salt);
+            query.bindValue(":iv", twofactor->iv);
+            if (!query.exec()) {
+                continue;
+            }
+            twofactor->id = query.lastInsertId().toUInt();
+        } else {
+            query.prepare(QString("UPDATE \"%1\" SET \"%2\" = :id_datas, \"%3\" = :twofactor, \"%4\" = :salt, \"%5\" = :iv WHERE \"%6\" = :id")
+                              .arg(DataBase::nameTableTwofactors)
+                              .arg(DataBase::nameTableTwofactorsColumnIdDatas)
+                              .arg(DataBase::nameTableTwofactorsColumnTwofactor)
+                              .arg(DataBase::nameTableTwofactorsColumnSalt)
+                              .arg(DataBase::nameTableTwofactorsColumnIV)
+                              .arg(DataBase::nameTableTwofactorsColumnId));
+            query.bindValue(":id_datas", twofactor->twofactors->data->id);
+            query.bindValue(":twofactor", twofactor->twofactor);
+            query.bindValue(":salt", twofactor->salt);
+            query.bindValue(":iv", twofactor->iv);
+            query.bindValue(":id", twofactor->id);
+            query.exec();
+        }
+    }
+}
+
+void DataBase::write(QList<Secret*> &secrets)
+{
+    DataBase::common();
+
+    for (Secret *secret : secrets) {
+        QSqlQuery query(DataBase::db);
+        if (secret->id == 0) {
+            query.prepare(QString("INSERT INTO \"%1\" (\"%2\", \"%3\", \"%4\", \"%5\") VALUES (:id_datas, :secret, :salt, :iv)")
+                              .arg(DataBase::nameTableSecrets)
+                              .arg(DataBase::nameTableSecretsColumnIdDatas)
+                              .arg(DataBase::nameTableSecretsColumnSecret)
+                              .arg(DataBase::nameTableSecretsColumnSalt)
+                              .arg(DataBase::nameTableSecretsColumnIV));
+            query.bindValue(":id_datas", secret->secrets->data->id);
+            query.bindValue(":secret", secret->secret);
+            query.bindValue(":salt", secret->salt);
+            query.bindValue(":iv", secret->iv);
+            if (!query.exec()) {
+                continue;
+            }
+            secret->id = query.lastInsertId().toUInt();
+        } else {
+            query.prepare(QString("UPDATE \"%1\" SET \"%2\" = :id_datas, \"%3\" = :secret, \"%4\" = :salt, \"%5\" = :iv WHERE \"%6\" = :id")
+                              .arg(DataBase::nameTableSecrets)
+                              .arg(DataBase::nameTableSecretsColumnIdDatas)
+                              .arg(DataBase::nameTableSecretsColumnSecret)
+                              .arg(DataBase::nameTableSecretsColumnSalt)
+                              .arg(DataBase::nameTableSecretsColumnIV)
+                              .arg(DataBase::nameTableSecretsColumnId));
+            query.bindValue(":id_datas", secret->secrets->data->id);
+            query.bindValue(":secret", secret->secret);
+            query.bindValue(":salt", secret->salt);
+            query.bindValue(":iv", secret->iv);
+            query.bindValue(":id", secret->id);
+            query.exec();
+        }
+    }
+}
+
+Datas *DataBase::read()
+{
+    DataBase::common();
+
+    Datas *datas = new Datas;
+
+    DataBase::getDatas(*datas);
 
     return datas;
 }
 
-void DataBase::getDatas(QList<Data> &datas)
+void DataBase::getDatas(Datas &datas)
 {
-    QString request = QString("SELECT '%1', '%2' FROM '%3'").arg(DataBase::nameTableDatasColumnId).arg(DataBase::nameTableDatasColumnName).arg(DataBase::nameTableDatas);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.prepare(QString("SELECT \"%1\", \"%2\", \"%3\", \"%4\" FROM \"%5\"")
+                      .arg(DataBase::nameTableDatasColumnId)
+                      .arg(DataBase::nameTableDatasColumnName)
+                      .arg(DataBase::nameTableDatasColumnSalt)
+                      .arg(DataBase::nameTableDatasColumnIV)
+                      .arg(DataBase::nameTableDatas));
+    query.exec();
 
     while (query.next()) {
-        Data data;
+        Data *data = new Data;
+        data->id = query.value(0).toUInt();
+        data->name = query.value(1).toByteArray();
+        data->salt = query.value(2).toByteArray();
+        data->iv = query.value(3).toByteArray();
 
-        int id = query.value(0).toUInt();
-        QString name = query.value(1).toString();
+        DataBase::getLogins(*data);
+        DataBase::getPasswords(*data);
+        DataBase::getMails(*data);
+        DataBase::getTelephones(*data);
+        DataBase::getTwofactors(*data);
+        DataBase::getSecrets(*data);
 
-        data.id = id;
-        data.name = name;
-
-        datas.push_back(data);
+        data->datas = &datas;
+        datas.datas.push_back(data);
     }
 }
 
-void DataBase::getLogins(QList<Data> &datas)
+void DataBase::getLogins(Data &data)
 {
-    QString request = QString("SELECT '%1', '%2', '%3' FROM '%4'").arg(DataBase::nameTableLoginsColumnId).arg(DataBase::nameTableLoginsColumnIdDatas).arg(DataBase::nameTableLoginsColumnLogin).arg(DataBase::nameTableLogins);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.prepare(QString("SELECT \"%1\", \"%2\", \"%3\", \"%4\" FROM \"%5\" WHERE \"%6\" = :id_datas")
+                      .arg(DataBase::nameTableLoginsColumnId)
+                      .arg(DataBase::nameTableLoginsColumnLogin)
+                      .arg(DataBase::nameTableLoginsColumnSalt)
+                      .arg(DataBase::nameTableLoginsColumnIV)
+                      .arg(DataBase::nameTableLogins)
+                      .arg(DataBase::nameTableLoginsColumnIdDatas));
+    query.bindValue(":id_datas", data.id);
+    query.exec();
 
+    Logins *logins = new Logins;
+    logins->data = &data;
+    data.logins = logins;
     while (query.next()) {
-        Login login;
-
-        int id = query.value(0).toUInt();
-        int id_datas = query.value(1).toUInt();
-        QString _login = query.value(2).toString();
-
-        login.id = id;
-        login.id_datas = id_datas;
-        login.login = _login;
-
-        for (Data &data : datas) {
-            if (data.id == login.id_datas) {
-                data.logins.push_back(login);
-                break;
-            }
-        }
+        Login *login = new Login;
+        login->id = query.value(0).toUInt();
+        login->login = query.value(1).toByteArray();
+        login->salt = query.value(2).toByteArray();
+        login->iv = query.value(3).toByteArray();
+        login->logins = logins;
+        logins->logins.push_back(login);
     }
 }
 
-void DataBase::getPasswords(QList<Data> &datas)
+void DataBase::getPasswords(Data &data)
 {
-    QString request = QString("SELECT '%1', '%2', '%3' FROM '%4'").arg(DataBase::nameTablePasswordsColumnId).arg(DataBase::nameTablePasswordsColumnIdDatas).arg(DataBase::nameTablePasswordsColumnPassword).arg(DataBase::nameTablePasswords);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.prepare(QString("SELECT \"%1\", \"%2\", \"%3\", \"%4\" FROM \"%5\" WHERE \"%6\" = :id_datas")
+                      .arg(DataBase::nameTablePasswordsColumnId)
+                      .arg(DataBase::nameTablePasswordsColumnPassword)
+                      .arg(DataBase::nameTablePasswordsColumnSalt)
+                      .arg(DataBase::nameTablePasswordsColumnIV)
+                      .arg(DataBase::nameTablePasswords)
+                      .arg(DataBase::nameTablePasswordsColumnIdDatas));
+    query.bindValue(":id_datas", data.id);
+    query.exec();
 
+    Passwords *passwords = new Passwords;
+    passwords->data = &data;
+    data.passwords = passwords;
     while (query.next()) {
-        Password password;
-
-        int id = query.value(0).toUInt();
-        int id_datas = query.value(1).toUInt();
-        QString _password = query.value(2).toString();
-
-        password.id = id;
-        password.id_datas = id_datas;
-        password.password = _password;
-
-        for (Data &data : datas) {
-            if (data.id == password.id_datas) {
-                data.passwords.push_back(password);
-                break;
-            }
-        }
+        Password *password = new Password;
+        password->id = query.value(0).toUInt();
+        password->password = query.value(1).toByteArray();
+        password->salt = query.value(2).toByteArray();
+        password->iv = query.value(3).toByteArray();
+        password->passwords = passwords;
+        passwords->passwords.push_back(password);
     }
 }
 
-void DataBase::getMails(QList<Data> &datas)
+void DataBase::getMails(Data &data)
 {
-    QString request = QString("SELECT '%1', '%2', '%3' FROM '%4'").arg(DataBase::nameTableMailsColumnId).arg(DataBase::nameTableMailsColumnIdDatas).arg(DataBase::nameTableMailsColumnMail).arg(DataBase::nameTableMails);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.prepare(QString("SELECT \"%1\", \"%2\", \"%3\", \"%4\" FROM \"%5\" WHERE \"%6\" = :id_datas")
+                      .arg(DataBase::nameTableMailsColumnId)
+                      .arg(DataBase::nameTableMailsColumnMail)
+                      .arg(DataBase::nameTableMailsColumnSalt)
+                      .arg(DataBase::nameTableMailsColumnIV)
+                      .arg(DataBase::nameTableMails)
+                      .arg(DataBase::nameTableMailsColumnIdDatas));
+    query.bindValue(":id_datas", data.id);
+    query.exec();
 
+    Mails *mails = new Mails;
+    mails->data = &data;
+    data.mails = mails;
     while (query.next()) {
-        Mail mail;
-
-        int id = query.value(0).toUInt();
-        int id_datas = query.value(1).toUInt();
-        QString _mail = query.value(2).toString();
-
-        mail.id = id;
-        mail.id_datas = id_datas;
-        mail.mail = _mail;
-
-        for (Data &data : datas) {
-            if (data.id == mail.id_datas) {
-                data.mails.push_back(mail);
-                break;
-            }
-        }
+        Mail *mail = new Mail;
+        mail->id = query.value(0).toUInt();
+        mail->mail = query.value(1).toByteArray();
+        mail->salt = query.value(2).toByteArray();
+        mail->iv = query.value(3).toByteArray();
+        mail->mails = mails;
+        mails->mails.push_back(mail);
     }
 }
 
-void DataBase::getTelephones(QList<Data> &datas)
+void DataBase::getTelephones(Data &data)
 {
-    QString request = QString("SELECT '%1', '%2', '%3' FROM '%4'").arg(DataBase::nameTableTelephonesColumnId).arg(DataBase::nameTableTelephonesColumnIdDatas).arg(DataBase::nameTableTelephonesColumnTelephone).arg(DataBase::nameTableTelephones);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.prepare(QString("SELECT \"%1\", \"%2\", \"%3\", \"%4\" FROM \"%5\" WHERE \"%6\" = :id_datas")
+                      .arg(DataBase::nameTableTelephonesColumnId)
+                      .arg(DataBase::nameTableTelephonesColumnTelephone)
+                      .arg(DataBase::nameTableTelephonesColumnSalt)
+                      .arg(DataBase::nameTableTelephonesColumnIV)
+                      .arg(DataBase::nameTableTelephones)
+                      .arg(DataBase::nameTableTelephonesColumnIdDatas));
+    query.bindValue(":id_datas", data.id);
+    query.exec();
 
+    Telephones *telephones = new Telephones;
+    telephones->data = &data;
+    data.telephones = telephones;
     while (query.next()) {
-        Telephone telephone;
-
-        int id = query.value(0).toUInt();
-        int id_datas = query.value(1).toUInt();
-        QString _telephone = query.value(2).toString();
-
-        telephone.id = id;
-        telephone.id_datas = id_datas;
-        telephone.telephone = _telephone;
-
-        for (Data &data : datas) {
-            if (data.id == telephone.id_datas) {
-                data.telephones.push_back(telephone);
-                break;
-            }
-        }
+        Telephone *telephone = new Telephone;
+        telephone->id = query.value(0).toUInt();
+        telephone->telephone = query.value(1).toByteArray();
+        telephone->salt = query.value(2).toByteArray();
+        telephone->iv = query.value(3).toByteArray();
+        telephone->telephones = telephones;
+        telephones->telephones.push_back(telephone);
     }
 }
 
-void DataBase::getTwofactors(QList<Data> &datas)
+void DataBase::getTwofactors(Data &data)
 {
-    QString request = QString("SELECT '%1', '%2', '%3' FROM '%4'").arg(DataBase::nameTableTwofactorsColumnId).arg(DataBase::nameTableTwofactorsColumnIdDatas).arg(DataBase::nameTableTwofactorsColumnTwofactor).arg(DataBase::nameTableTwofactors);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.prepare(QString("SELECT \"%1\", \"%2\", \"%3\", \"%4\" FROM \"%5\" WHERE \"%6\" = :id_datas")
+                      .arg(DataBase::nameTableTwofactorsColumnId)
+                      .arg(DataBase::nameTableTwofactorsColumnTwofactor)
+                      .arg(DataBase::nameTableTwofactorsColumnSalt)
+                      .arg(DataBase::nameTableTwofactorsColumnIV)
+                      .arg(DataBase::nameTableTwofactors)
+                      .arg(DataBase::nameTableTwofactorsColumnIdDatas));
+    query.bindValue(":id_datas", data.id);
+    query.exec();
 
+    Twofactors *twofactors = new Twofactors;
+    twofactors->data = &data;
+    data.twofactors = twofactors;
     while (query.next()) {
-        Twofactor twofactor;
-
-        int id = query.value(0).toUInt();
-        int id_datas = query.value(1).toUInt();
-        QString _twofactor = query.value(2).toString();
-
-        twofactor.id = id;
-        twofactor.id_datas = id_datas;
-        twofactor.twofactor = _twofactor;
-
-        for (Data &data : datas) {
-            if (data.id == twofactor.id_datas) {
-                data.twofactors.push_back(twofactor);
-                break;
-            }
-        }
+        Twofactor *twofactor = new Twofactor;
+        twofactor->id = query.value(0).toUInt();
+        twofactor->twofactor = query.value(1).toByteArray();
+        twofactor->salt = query.value(2).toByteArray();
+        twofactor->iv = query.value(3).toByteArray();
+        twofactor->twofactors = twofactors;
+        twofactors->twofactors.push_back(twofactor);
     }
 }
 
-void DataBase::getSecrets(QList<Data> &datas)
+void DataBase::getSecrets(Data &data)
 {
-    QString request = QString("SELECT '%1', '%2', '%3' FROM '%4'").arg(DataBase::nameTableSecretsColumnId).arg(DataBase::nameTableSecretsColumnIdDatas).arg(DataBase::nameTableSecretsColumnSecret).arg(DataBase::nameTableSecrets);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.prepare(QString("SELECT \"%1\", \"%2\", \"%3\", \"%4\" FROM \"%5\" WHERE \"%6\" = :id_datas")
+                      .arg(DataBase::nameTableSecretsColumnId)
+                      .arg(DataBase::nameTableSecretsColumnSecret)
+                      .arg(DataBase::nameTableSecretsColumnSalt)
+                      .arg(DataBase::nameTableSecretsColumnIV)
+                      .arg(DataBase::nameTableSecrets)
+                      .arg(DataBase::nameTableSecretsColumnIdDatas));
+    query.bindValue(":id_datas", data.id);
+    query.exec();
 
+    Secrets *secrets = new Secrets;
+    secrets->data = &data;
+    data.secrets = secrets;
     while (query.next()) {
-        Secret secret;
-
-        int id = query.value(0).toUInt();
-        int id_datas = query.value(1).toUInt();
-        QString _secret = query.value(2).toString();
-
-        secret.id = id;
-        secret.id_datas = id_datas;
-        secret.secret = _secret;
-
-        for (Data &data : datas) {
-            if (data.id == secret.id_datas) {
-                data.secrets.push_back(secret);
-                break;
-            }
-        }
+        Secret *secret = new Secret;
+        secret->id = query.value(0).toUInt();
+        secret->secret = query.value(1).toByteArray();
+        secret->salt = query.value(2).toByteArray();
+        secret->iv = query.value(3).toByteArray();
+        secret->secrets = secrets;
+        secrets->secrets.push_back(secret);
     }
 }
 
@@ -407,32 +556,26 @@ void DataBase::checkAndCreateDataBase()
         DataBase::deleteTable(DataBase::nameTableDatas);
         DataBase::createTable(DataBase::createRequestCreateTableDatas());
     }
-
     if (!DataBase::checkTable(DataBase::nameTableLogins, DataBase::createRequestCreateTableLogins())) {
         DataBase::deleteTable(DataBase::nameTableLogins);
         DataBase::createTable(DataBase::createRequestCreateTableLogins());
     }
-
     if (!DataBase::checkTable(DataBase::nameTablePasswords, DataBase::createRequestCreateTablePasswords())) {
         DataBase::deleteTable(DataBase::nameTablePasswords);
         DataBase::createTable(DataBase::createRequestCreateTablePasswords());
     }
-
     if (!DataBase::checkTable(DataBase::nameTableMails, DataBase::createRequestCreateTableMails())) {
         DataBase::deleteTable(DataBase::nameTableMails);
         DataBase::createTable(DataBase::createRequestCreateTableMails());
     }
-
     if (!DataBase::checkTable(DataBase::nameTableTelephones, DataBase::createRequestCreateTableTelephones())) {
         DataBase::deleteTable(DataBase::nameTableTelephones);
         DataBase::createTable(DataBase::createRequestCreateTableTelephones());
     }
-
     if (!DataBase::checkTable(DataBase::nameTableTwofactors, DataBase::createRequestCreateTableTwofactors())) {
         DataBase::deleteTable(DataBase::nameTableTwofactors);
         DataBase::createTable(DataBase::createRequestCreateTableTwofactors());
     }
-
     if (!DataBase::checkTable(DataBase::nameTableSecrets, DataBase::createRequestCreateTableSecrets())) {
         DataBase::deleteTable(DataBase::nameTableSecrets);
         DataBase::createTable(DataBase::createRequestCreateTableSecrets());
@@ -441,15 +584,16 @@ void DataBase::checkAndCreateDataBase()
 
 bool DataBase::checkTable(const QString &name, const QString &requestCreate)
 {
-    QString request = QString("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '%1'").arg(name);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name");
+    query.bindValue(":name", name);
+    query.exec();
 
-    query.next();
-    QString response = query.value(0).toString();
-
-    return response == requestCreate;
+    if (query.next()) {
+        QString response = query.value(0).toString();
+        return response == requestCreate;
+    }
+    return false;
 }
 
 void DataBase::createTable(const QString &request)
@@ -460,48 +604,117 @@ void DataBase::createTable(const QString &request)
 
 void DataBase::deleteTable(const QString &name)
 {
-    QString request = QString("DROP TABLE '%1'").arg(name);
-
     QSqlQuery query(DataBase::db);
-    query.exec(request);
+    query.exec(QString("DROP TABLE \"%1\"").arg(name));
 }
 
 QString DataBase::createRequestCreateTableDatas()
 {
-    return QString("CREATE TABLE '%1' ('%2' INTEGER PRIMARY KEY ASC ON CONFLICT ROLLBACK AUTOINCREMENT, '%3' TEXT)").arg(DataBase::nameTableDatas).arg(DataBase::nameTableDatasColumnId).arg(DataBase::nameTableDatasColumnName);
+    return QString("CREATE TABLE \"%1\" ("
+                   "\"%2\" INTEGER PRIMARY KEY AUTOINCREMENT, "
+                   "\"%3\" BLOB, "
+                   "\"%4\" BLOB, "
+                   "\"%5\" BLOB)")
+        .arg(DataBase::nameTableDatas)
+        .arg(DataBase::nameTableDatasColumnId)
+        .arg(DataBase::nameTableDatasColumnName)
+        .arg(DataBase::nameTableDatasColumnSalt)
+        .arg(DataBase::nameTableDatasColumnIV);
 }
 
 QString DataBase::createRequestCreateTableLogins()
 {
-    return DataBase::createRequestCreateTable(DataBase::nameTableLogins, DataBase::nameTableLoginsColumnId, DataBase::nameTableLoginsColumnIdDatas, DataBase::nameTableDatas, DataBase::nameTableDatasColumnId, DataBase::nameTableLoginsColumnLogin);
+    return DataBase::createRequestCreateTable(DataBase::nameTableLogins,
+                                              DataBase::nameTableLoginsColumnId,
+                                              DataBase::nameTableLoginsColumnIdDatas,
+                                              DataBase::nameTableDatas,
+                                              DataBase::nameTableDatasColumnId,
+                                              DataBase::nameTableLoginsColumnLogin,
+                                              DataBase::nameTableLoginsColumnSalt,
+                                              DataBase::nameTableLoginsColumnIV);
 }
 
 QString DataBase::createRequestCreateTablePasswords()
 {
-    return DataBase::createRequestCreateTable(DataBase::nameTablePasswords, DataBase::nameTablePasswordsColumnId, DataBase::nameTablePasswordsColumnIdDatas, DataBase::nameTableDatas, DataBase::nameTableDatasColumnId, DataBase::nameTablePasswordsColumnPassword);
+    return DataBase::createRequestCreateTable(DataBase::nameTablePasswords,
+                                              DataBase::nameTablePasswordsColumnId,
+                                              DataBase::nameTablePasswordsColumnIdDatas,
+                                              DataBase::nameTableDatas,
+                                              DataBase::nameTableDatasColumnId,
+                                              DataBase::nameTablePasswordsColumnPassword,
+                                              DataBase::nameTablePasswordsColumnSalt,
+                                              DataBase::nameTablePasswordsColumnIV);
 }
 
 QString DataBase::createRequestCreateTableMails()
 {
-    return DataBase::createRequestCreateTable(DataBase::nameTableMails, DataBase::nameTableMailsColumnId, DataBase::nameTableMailsColumnIdDatas, DataBase::nameTableDatas, DataBase::nameTableDatasColumnId, DataBase::nameTableMailsColumnMail);
+    return DataBase::createRequestCreateTable(DataBase::nameTableMails,
+                                              DataBase::nameTableMailsColumnId,
+                                              DataBase::nameTableMailsColumnIdDatas,
+                                              DataBase::nameTableDatas,
+                                              DataBase::nameTableDatasColumnId,
+                                              DataBase::nameTableMailsColumnMail,
+                                              DataBase::nameTableMailsColumnSalt,
+                                              DataBase::nameTableMailsColumnIV);
 }
 
 QString DataBase::createRequestCreateTableTelephones()
 {
-    return DataBase::createRequestCreateTable(DataBase::nameTableTelephones, DataBase::nameTableTelephonesColumnId, DataBase::nameTableTelephonesColumnIdDatas, DataBase::nameTableDatas, DataBase::nameTableDatasColumnId, DataBase::nameTableTelephonesColumnTelephone);
+    return DataBase::createRequestCreateTable(DataBase::nameTableTelephones,
+                                              DataBase::nameTableTelephonesColumnId,
+                                              DataBase::nameTableTelephonesColumnIdDatas,
+                                              DataBase::nameTableDatas,
+                                              DataBase::nameTableDatasColumnId,
+                                              DataBase::nameTableTelephonesColumnTelephone,
+                                              DataBase::nameTableTelephonesColumnSalt,
+                                              DataBase::nameTableTelephonesColumnIV);
 }
 
 QString DataBase::createRequestCreateTableTwofactors()
 {
-    return DataBase::createRequestCreateTable(DataBase::nameTableTwofactors, DataBase::nameTableTwofactorsColumnId, DataBase::nameTableTwofactorsColumnIdDatas, DataBase::nameTableDatas, DataBase::nameTableDatasColumnId, DataBase::nameTableTwofactorsColumnTwofactor);
+    return DataBase::createRequestCreateTable(DataBase::nameTableTwofactors,
+                                              DataBase::nameTableTwofactorsColumnId,
+                                              DataBase::nameTableTwofactorsColumnIdDatas,
+                                              DataBase::nameTableDatas,
+                                              DataBase::nameTableDatasColumnId,
+                                              DataBase::nameTableTwofactorsColumnTwofactor,
+                                              DataBase::nameTableTwofactorsColumnSalt,
+                                              DataBase::nameTableTwofactorsColumnIV);
 }
 
 QString DataBase::createRequestCreateTableSecrets()
 {
-    return DataBase::createRequestCreateTable(DataBase::nameTableSecrets, DataBase::nameTableSecretsColumnId, DataBase::nameTableSecretsColumnIdDatas, DataBase::nameTableDatas, DataBase::nameTableDatasColumnId, DataBase::nameTableSecretsColumnSecret);
+    return DataBase::createRequestCreateTable(DataBase::nameTableSecrets,
+                                              DataBase::nameTableSecretsColumnId,
+                                              DataBase::nameTableSecretsColumnIdDatas,
+                                              DataBase::nameTableDatas,
+                                              DataBase::nameTableDatasColumnId,
+                                              DataBase::nameTableSecretsColumnSecret,
+                                              DataBase::nameTableSecretsColumnSalt,
+                                              DataBase::nameTableSecretsColumnIV);
 }
 
-QString DataBase::createRequestCreateTable(const QString &nameTable, const QString &nameColumnId, const QString &nameColumnKey, const QString &nameTableDatas, const QString &nameTableDatasColumnId, const QString &nameColumnInformation)
+QString DataBase::createRequestCreateTable(const QString &nameTable,
+                                           const QString &nameColumnId,
+                                           const QString &nameColumnKey,
+                                           const QString &nameTableDatas,
+                                           const QString &nameTableDatasColumnId,
+                                           const QString &nameColumnInformation,
+                                           const QString &saltColumnName,
+                                           const QString &ivColumnName)
 {
-    return QString("CREATE TABLE '%1' ('%2' INTEGER PRIMARY KEY ASC ON CONFLICT ROLLBACK AUTOINCREMENT, '%3' INTEGER REFERENCES '%4' ('%5') ON DELETE CASCADE ON UPDATE CASCADE, '%6' TEXT)").arg(nameTable).arg(nameColumnId).arg(nameColumnKey).arg(nameTableDatas).arg(nameTableDatasColumnId).arg(nameColumnInformation);
+    return QString("CREATE TABLE \"%1\" ("
+                   "\"%2\" INTEGER PRIMARY KEY AUTOINCREMENT, "
+                   "\"%3\" INTEGER REFERENCES \"%4\" (\"%5\") ON DELETE CASCADE ON UPDATE CASCADE, "
+                   "\"%6\" BLOB, "
+                   "\"%7\" BLOB, "
+                   "\"%8\" BLOB)")
+        .arg(nameTable)
+        .arg(nameColumnId)
+        .arg(nameColumnKey)
+        .arg(nameTableDatas)
+        .arg(nameTableDatasColumnId)
+        .arg(nameColumnInformation)
+        .arg(saltColumnName)
+        .arg(ivColumnName);
 }
